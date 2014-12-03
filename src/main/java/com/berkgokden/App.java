@@ -1,15 +1,11 @@
 package com.berkgokden;
 
-import com.hazelcast.config.Config;
-import com.hazelcast.config.NetworkConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.ICountDownLatch;
 import com.hazelcast.core.IMap;
 import org.apache.log4j.Logger;
 
-import java.util.Arrays;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -19,15 +15,17 @@ import java.util.concurrent.TimeUnit;
 public class App 
 {
     private static final Logger logger = Logger.getLogger(App.class);
+    public static final int NUMBEROFINSTANCES = 10;
+    public static final int TIMEOUTINMUNITES = 1;
     public static void main( String[] args )
     {
         // Prepare Hazelcast cluster
         HazelcastInstance hazelcastInstance = Hazelcast.newHazelcastInstance();
         ICountDownLatch latch = hazelcastInstance.getCountDownLatch( "countDownLatch" );
 
-        boolean success = printWeAreStartedWhenReady(hazelcastInstance, 10);
+        boolean success = printWeAreStartedWhenReady(hazelcastInstance, NUMBEROFINSTANCES);
 
-        System.out.println( "Completed");
+        logger.debug("Completed");
         hazelcastInstance.shutdown();
 
     }
@@ -36,13 +34,13 @@ public class App
     {
 
         ICountDownLatch latch = hazelcastInstance.getCountDownLatch( "countDownLatch" );
-        latch.trySetCount( numberOfNodes );
+        latch.trySetCount( numberOfNodes ); //this would run only once until it is reset
 
         latch.countDown();
 
         boolean result = false;
         try {
-            boolean success = latch.await( 10, TimeUnit.MINUTES );
+            boolean success = latch.await(TIMEOUTINMUNITES, TimeUnit.MINUTES );
             if (success) {
                 IMap<String, Boolean> map = hazelcastInstance.getMap("debugging");
 
@@ -64,11 +62,9 @@ public class App
                 System.err.println("Something may have gone wrong. We are not fully started!");
             }
         } catch (InterruptedException e) {
-            System.err.println("Something may have gone wrong. We are not fully started!");
-            e.printStackTrace();
+            System.err.println("Something may have gone wrong. We are not fully started! :"+ e.getMessage());
         } catch (Exception e) {
-            System.err.println("Something may have gone wrong. We are not fully started!");
-            e.printStackTrace();
+            System.err.println("Something may have gone wrong. We are not fully started! :"+e.getMessage());
         }
 
         return result;
