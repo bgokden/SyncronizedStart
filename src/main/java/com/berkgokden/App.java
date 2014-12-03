@@ -54,6 +54,8 @@ public class App
         try {
             boolean success = latch.await(timeOutInMunites, TimeUnit.MINUTES );
             if (success) {
+                //This is Double-checked_locking
+                //Behaves as if Hazelcast Cluster is a huge singleton
                 IMap<String, Boolean> map = hazelcastInstance.getMap("debugging");
 
                 Boolean isWeAreStartedPrinted = map.get("is-we-are-started-printed");
