@@ -1,5 +1,6 @@
 package com.berkgokden;
 
+import com.hazelcast.config.Config;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.ICountDownLatch;
@@ -16,21 +17,32 @@ public class App
 {
     private static final Logger logger = Logger.getLogger(App.class);
     public static final int NUMBEROFINSTANCES = 10;
-    public static final int TIMEOUTINMUNITES = 1;
+    public static final int TIMEOUTINMUNITES = 10;
+
     public static void main( String[] args )
     {
-        // Prepare Hazelcast cluster
-        HazelcastInstance hazelcastInstance = Hazelcast.newHazelcastInstance();
-        ICountDownLatch latch = hazelcastInstance.getCountDownLatch( "countDownLatch" );
+        startHazelcastAndWriteWeAreStarted(NUMBEROFINSTANCES,TIMEOUTINMUNITES);
+    }
 
-        boolean success = printWeAreStartedWhenReady(hazelcastInstance, NUMBEROFINSTANCES);
+    public static boolean startHazelcastAndWriteWeAreStarted(int numberOfNodes, int timeOutInMunites) {
+
+        // Prepare Hazelcast cluster - adding some configuration for easier testing
+        Config config = new Config() ;
+        config.setProperty( "hazelcast.logging.type", "log4j" );
+        HazelcastInstance hazelcastInstance = Hazelcast.newHazelcastInstance(config);
+        ICountDownLatch latch = hazelcastInstance.getCountDownLatch("countDownLatch");
+
+        logger.debug("Started");
+
+        boolean success = App.printWeAreStartedWhenReady(hazelcastInstance, numberOfNodes, timeOutInMunites);
 
         logger.debug("Completed");
         hazelcastInstance.shutdown();
 
+        return success;
     }
 
-    public static boolean printWeAreStartedWhenReady(HazelcastInstance hazelcastInstance, int numberOfNodes)
+    public static boolean printWeAreStartedWhenReady(HazelcastInstance hazelcastInstance, int numberOfNodes, int timeOutInMunites)
     {
 
         ICountDownLatch latch = hazelcastInstance.getCountDownLatch( "countDownLatch" );
@@ -40,7 +52,7 @@ public class App
 
         boolean result = false;
         try {
-            boolean success = latch.await(TIMEOUTINMUNITES, TimeUnit.MINUTES );
+            boolean success = latch.await(timeOutInMunites, TimeUnit.MINUTES );
             if (success) {
                 IMap<String, Boolean> map = hazelcastInstance.getMap("debugging");
 
