@@ -1,7 +1,7 @@
 # SyncronizedStart
 
 SyncronizedStart is an Proof of Concept App that it is how easy to start syncronized applications with Hazelcast. 
-It is an application that will be running on 10 nodes. The application coordinates among the nodes and makes sure that one and only one of them does a System.out.println("We are started!"). You will also observe that if one of the server fails others will warn you.
+It is an application that will be running on 10 nodes. The application coordinates among the nodes and makes sure that one and only one of them does a System.out.println("We are started!").
 
 ### Installation
 ```
