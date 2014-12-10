@@ -3,11 +3,8 @@ package com.berkgokden;
 import com.hazelcast.config.Config;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.core.ICountDownLatch;
 import com.hazelcast.core.IMap;
 import org.apache.log4j.Logger;
-
-import java.util.concurrent.TimeUnit;
 
 /**
  * Hello world!
@@ -16,25 +13,22 @@ import java.util.concurrent.TimeUnit;
 public class App 
 {
     private static final Logger logger = Logger.getLogger(App.class);
-    public static final int NUMBEROFINSTANCES = 10;
-    public static final int TIMEOUTINMUNITES = 10;
 
     public static void main( String[] args )
     {
-        startHazelcastAndWriteWeAreStarted(NUMBEROFINSTANCES,TIMEOUTINMUNITES);
+        startHazelcastAndWriteWeAreStarted();
     }
 
-    public static boolean startHazelcastAndWriteWeAreStarted(int numberOfNodes, int timeOutInMunites) {
+    public static boolean startHazelcastAndWriteWeAreStarted() {
 
         // Prepare Hazelcast cluster - adding some configuration for easier testing
         Config config = new Config() ;
         config.setProperty( "hazelcast.logging.type", "log4j" );
         HazelcastInstance hazelcastInstance = Hazelcast.newHazelcastInstance(config);
-        ICountDownLatch latch = hazelcastInstance.getCountDownLatch("countDownLatch");
 
         logger.debug("Started");
 
-        boolean success = App.printWeAreStartedWhenReady(hazelcastInstance, numberOfNodes, timeOutInMunites);
+        boolean success = App.printWeAreStartedWhenReady(hazelcastInstance);
 
         logger.debug("Completed");
         hazelcastInstance.shutdown();
@@ -42,43 +36,37 @@ public class App
         return success;
     }
 
-    public static boolean printWeAreStartedWhenReady(HazelcastInstance hazelcastInstance, int numberOfNodes, int timeOutInMunites)
+    public static boolean printWeAreStartedWhenReady(HazelcastInstance hazelcastInstance)
     {
-
-        ICountDownLatch latch = hazelcastInstance.getCountDownLatch( "countDownLatch" );
-        latch.trySetCount( numberOfNodes ); //this would run only once until it is reset
-
-        latch.countDown();
 
         boolean result = false;
         try {
-            boolean success = latch.await(timeOutInMunites, TimeUnit.MINUTES );
-            if (success) {
-                //This is Double-checked_locking
-                //Behaves as if Hazelcast Cluster is a huge singleton
-                IMap<String, Boolean> map = hazelcastInstance.getMap("debugging");
+            //Added this to check network if any other hazelcast instance exist before using maps
+            //While testing it is observed that a map is created even if it exists on another node
+            //It behaves like they are recovering from a split brain syndrome
+            Hazelcast.getAllHazelcastInstances();
 
-                Boolean isWeAreStartedPrinted = map.get("is-we-are-started-printed");
+            //This is Double-checked_locking
+            //Behaves as if Hazelcast Cluster is a huge singleton
+            IMap<String, Boolean> map = hazelcastInstance.getMap("debugging");
 
-                if (isWeAreStartedPrinted == null) {
-                    map.putIfAbsent("is-we-are-started-printed", false);
-                    if (map.tryLock("is-we-are-started-printed")) {
-                        isWeAreStartedPrinted = map.get("is-we-are-started-printed");
-                        if (!isWeAreStartedPrinted) {
-                            System.out.println("We are started!");
-                            map.put("is-we-are-started-printed", true);
-                            result = true;
-                        }
-                        map.unlock("is-we-are-started-printed");
+
+            Boolean isWeAreStartedPrinted = map.get("is-we-are-started-printed");
+
+            if (isWeAreStartedPrinted == null) {
+                map.putIfAbsent("is-we-are-started-printed", false);
+                if (map.tryLock("is-we-are-started-printed")) {
+                    isWeAreStartedPrinted = map.get("is-we-are-started-printed");
+                    if (!isWeAreStartedPrinted) {
+                        map.put("is-we-are-started-printed", true);
+                        System.out.println("We are started!");
+                        result = true;
                     }
+                    map.unlock("is-we-are-started-printed");
                 }
-            } else {
-                System.err.println("Something may have gone wrong. We are not fully started!");
             }
-        } catch (InterruptedException e) {
-            System.err.println("Something may have gone wrong. We are not fully started! :"+ e.getMessage());
         } catch (Exception e) {
-            System.err.println("Something may have gone wrong. We are not fully started! :"+e.getMessage());
+            System.err.println("Something may have gone wrong. We are not fully started! :" + e.getMessage());
         }
 
         return result;
