@@ -3,11 +3,13 @@ package com.berkgokden;
 import com.hazelcast.config.Config;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.core.IMap;
+import com.hazelcast.core.IAtomicLong;
 import org.apache.log4j.Logger;
 
+import java.util.Random;
+
 /**
- * Hello world!
+ * Synconized Start App
  *
  */
 public class App 
@@ -16,60 +18,57 @@ public class App
 
     public static void main( String[] args )
     {
-        startHazelcastAndWriteWeAreStarted();
+        ResultWithInstance resultWithInstance = startHazelcastAndWriteWeAreStarted(new Random().nextInt());
+        if (resultWithInstance.hazelcastInstance != null) {
+            resultWithInstance.hazelcastInstance.shutdown();
+        }
     }
 
-    public static boolean startHazelcastAndWriteWeAreStarted() {
+    public static ResultWithInstance startHazelcastAndWriteWeAreStarted(int groupId) {
 
         // Prepare Hazelcast cluster - adding some configuration for easier testing
         Config config = new Config() ;
         config.setProperty( "hazelcast.logging.type", "log4j" );
+        config.getGroupConfig().setName( "groupId-"+ groupId );
         HazelcastInstance hazelcastInstance = Hazelcast.newHazelcastInstance(config);
 
         logger.debug("Started");
 
-        boolean success = App.printWeAreStartedWhenReady(hazelcastInstance);
+        boolean result = App.printWeAreStartedWhenReady(hazelcastInstance);
 
         logger.debug("Completed");
-        hazelcastInstance.shutdown();
 
-        return success;
+        return new ResultWithInstance(hazelcastInstance, result);
     }
 
     public static boolean printWeAreStartedWhenReady(HazelcastInstance hazelcastInstance)
     {
 
-        boolean result = false;
         try {
-            //Added this to check network if any other hazelcast instance exist before using maps
-            //While testing it is observed that a map is created even if it exists on another node
-            //It behaves like they are recovering from a split brain syndrome
-            Hazelcast.getAllHazelcastInstances();
-
-            //This is Double-checked_locking
-            //Behaves as if Hazelcast Cluster is a huge singleton
-            IMap<String, Boolean> map = hazelcastInstance.getMap("debugging");
-
-
-            Boolean isWeAreStartedPrinted = map.get("is-we-are-started-printed");
-
-            if (isWeAreStartedPrinted == null) {
-                map.putIfAbsent("is-we-are-started-printed", false);
-                if (map.tryLock("is-we-are-started-printed")) {
-                    isWeAreStartedPrinted = map.get("is-we-are-started-printed");
-                    if (!isWeAreStartedPrinted) {
-                        map.put("is-we-are-started-printed", true);
-                        System.out.println("We are started!");
-                        result = true;
-                    }
-                    map.unlock("is-we-are-started-printed");
-                }
+            IAtomicLong counter = hazelcastInstance.getAtomicLong("counter");
+            Long value = counter.incrementAndGet();
+            logger.debug("Counter Value: "+value);
+            //There is no null check here since an error should be printed when value is null
+            if (value.longValue() == 1L) {
+                //We are first to got here
+                System.out.println("We are started!");
+                return true;
             }
         } catch (Exception e) {
-            System.err.println("Something may have gone wrong. We are not fully started! :" + e.getMessage());
+            System.err.println("Something have gone wrong: " + e.getMessage());
         }
 
-        return result;
+        return false;
+    }
+
+    public static class ResultWithInstance {
+
+        ResultWithInstance(HazelcastInstance hazelcastInstance, Boolean result) {
+            this.hazelcastInstance = hazelcastInstance;
+            this.result = result;
+        }
+        public HazelcastInstance hazelcastInstance;
+        public Boolean result;
     }
 
 }
