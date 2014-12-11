@@ -1,12 +1,16 @@
 package com.berkgokden;
 
 
+import com.hazelcast.core.Hazelcast;
 import org.apache.log4j.Logger;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.*;
 
 /**
@@ -17,16 +21,18 @@ public class AppTest {
     private static final int NUMBEROFINSTANCES = 10;
 
     @Test
-    public void shouldReturnTrueWhenWeAreStartedPrintedOnlyOnce() {
+    public void shouldPassWhenWeAreStartedPrintedOnlyOnce() {
 
         ExecutorService executorService = Executors.newFixedThreadPool(NUMBEROFINSTANCES);
 
-        List<Callable<Boolean>> callables = new ArrayList<Callable<Boolean>>(NUMBEROFINSTANCES);
+        final int groupId = new Random().nextInt();
+        logger.debug("GroupId :" + groupId);
+        final List<Callable<App.ResultWithInstance>> callables = new ArrayList<Callable<App.ResultWithInstance>>(NUMBEROFINSTANCES);
         for (int i = 0; i < NUMBEROFINSTANCES; i++) {
-            callables.add(new Callable<Boolean>() {
+            callables.add(new Callable<App.ResultWithInstance>() {
                 @Override
-                public Boolean call() throws Exception {
-                    return App.startHazelcastAndWriteWeAreStarted();
+                public App.ResultWithInstance call() throws Exception {
+                    return App.startHazelcastAndWriteWeAreStarted(groupId);
                 }
 
             });
@@ -36,11 +42,15 @@ public class AppTest {
         int numberOfSuccesfulProcesses = 0;
         try {
             //10 minutes is enough for starting at least one node
-            List<Future<Boolean>> resultList = executorService.invokeAll(callables, 10, TimeUnit.MINUTES);
+            List<Future<App.ResultWithInstance>> resultList = executorService.invokeAll(callables, 10, TimeUnit.MINUTES);
 
             for (int i = 0; i < resultList.size(); i++) {
-                if (resultList.get(i).get() != null && resultList.get(i).get().booleanValue()) {
-                    numberOfSuccesfulPrints++;
+                App.ResultWithInstance resultWithInstance = resultList.get(i).get();
+                if (resultWithInstance != null && resultWithInstance.hazelcastInstance != null) {
+                    resultWithInstance.hazelcastInstance.shutdown();
+                    if (resultWithInstance.result == true) {
+                        numberOfSuccesfulPrints++;
+                    }
                 }
                 numberOfSuccesfulProcesses++;
             }
@@ -58,7 +68,12 @@ public class AppTest {
         logger.debug("Number Of Successful :" + numberOfSuccesfulPrints);
         Assert.assertTrue("At least one of the threads should have completed successfully", numberOfSuccesfulProcesses > 0);
         Assert.assertTrue("Only one print event should occur.", numberOfSuccesfulPrints == 1);
+    }
 
+    @Before
+    @After
+    public void cleanup() throws Exception {
+        Hazelcast.shutdownAll();
     }
 
 }
